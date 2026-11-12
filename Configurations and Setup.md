@@ -8,11 +8,11 @@ A 1 manager + 3 data/SQL node cluster, built and verified on MySQL NDB Cluster *
 
 NDB Cluster stores data **in RAM across several machines** and keeps a copy on each. Three kinds of node cooperate:
 
-| Node type | Program | Job |
-|---|---|---|
+| Node type       | Program    | Job                                                            |
+| --------------- | ---------- | -------------------------------------------------------------- |
 | Management node | `ndb_mgmd` | Holds `config.ini`, tells nodes who is who, acts as arbitrator |
-| Data node | `ndbmtd` | Stores the data and its replicas (multi-threaded) |
-| SQL node | `mysqld` | The normal MySQL server your applications connect to |
+| Data node       | `ndbmtd`   | Stores the data and its replicas (multi-threaded)              |
+| SQL node        | `mysqld`   | The normal MySQL server your applications connect to           |
 
 Applications talk **only to SQL nodes** (port 3306). SQL nodes read and write through the data nodes. The manager is not in the data path; it coordinates.
 
@@ -24,35 +24,45 @@ Applications talk **only to SQL nodes** (port 3306). SQL nodes read and write th
 
 ### 2.1 Servers
 
-| Hostname | IP | Runs | Role |
-|---|---|---|---|
-| `mgm` | 172.15.14.176 | `ndb_mgmd` | Management node (NodeId 1) |
-| `node1` | 172.15.14.161 | `ndbmtd` + `mysqld` | Data node 2, SQL node 11 |
-| `node2` | 172.15.14.162 | `ndbmtd` + `mysqld` | Data node 3, SQL node 12 |
-| `node3` | 172.15.14.163 | `ndbmtd` + `mysqld` | Data node 4, SQL node 13 |
+| Hostname | IP            | Runs                | Role                       |
+| -------- | ------------- | ------------------- | -------------------------- |
+| `mgm`    | 172.15.14.176 | `ndb_mgmd`          | Management node (NodeId 1) |
+| `node1`  | 172.15.14.161 | `ndbmtd` + `mysqld` | Data node 2, SQL node 11   |
+| `node2`  | 172.15.14.162 | `ndbmtd` + `mysqld` | Data node 3, SQL node 12   |
+| `node3`  | 172.15.14.163 | `ndbmtd` + `mysqld` | Data node 4, SQL node 13   |
 
 ### 2.2 Topology diagram
 
+#### 2.2.1
+
+```mermaid
+flowchart TB
+    APP["Applications / clients"]
+    HAP["(optional) HAProxy<br/>:3306"]
+
+    subgraph NODES[" "]
+        direction LR
+        N1["node1<br/>mysqld (SQL 11)<br/>ndbmtd (Data 2)"]
+        N2["node2<br/>mysqld (SQL 12)<br/>ndbmtd (Data 3)"]
+        N3["node3<br/>mysqld (SQL 13)<br/>ndbmtd (Data 4)"]
+    end
+
+    MGM["mgm<br/>ndb_mgmd<br/>(Management node 1)<br/>:1186"]
+
+    APP --> HAP
+    HAP --> N1
+    HAP --> N2
+    HAP --> N3
+
+    N1 <--> N2
+    N2 <--> N3
+
+    N1 <--> MGM
+    N2 <--> MGM
+    N3 <--> MGM
 ```
-                  Applications / clients
-                          |
-                   (optional) HAProxy
-                          | :3306
-        +-----------------+-----------------+
-        |                 |                 |
-   +----v-----+      +----v-----+      +----v-----+
-   |  node1   |      |  node2   |      |  node3   |
-   | mysqld   |      | mysqld   |      | mysqld   |   <- SQL nodes (11, 12, 13)
-   | ndbmtd   |<---->| ndbmtd   |<---->| ndbmtd   |   <- Data nodes (2, 3, 4)
-   +----^-----+      +----^-----+      +----^-----+
-        |                 |                 |
-        +-----------------+-----------------+
-                          | :1186
-                    +-----v------+
-                    |    mgm     |
-                    |  ndb_mgmd  |                    <- Management node (1)
-                    +------------+
-```
+
+#### 2.2.2
 
 ```mermaid
 flowchart TB
@@ -73,15 +83,15 @@ flowchart TB
 
 ### 2.3 Hardware guidance (physical servers)
 
-| Item | Recommendation | Why |
-|---|---|---|
-| RAM (data nodes) | At least 1.5x to 2x the `DataMemory` you plan to set | NDB keeps all data in RAM; running out of RAM crashes the node |
-| CPU (data nodes) | 4+ cores | `ndbmtd` is multi-threaded |
-| Disk (data nodes) | SSD/NVMe for `DataDir` | Checkpoints and redo logs are written continuously |
-| Disk (manager) | Small is fine | Holds only config and logs |
-| Network | Dedicated subnet, 1 Gbit minimum, 10 Gbit preferred, wired | Nodes exchange heartbeats and data constantly; latency and packet loss cause node failures |
-| Time sync | `chrony` or NTP on every server | Log correlation and fewer odd timing issues |
-| Power | UPS, and spread nodes across separate power circuits if possible | Replicas only help if servers do not fail together |
+| Item              | Recommendation                                                   | Why                                                                                        |
+| ----------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| RAM (data nodes)  | At least 1.5x to 2x the `DataMemory` you plan to set             | NDB keeps all data in RAM; running out of RAM crashes the node                             |
+| CPU (data nodes)  | 4+ cores                                                         | `ndbmtd` is multi-threaded                                                                 |
+| Disk (data nodes) | SSD/NVMe for `DataDir`                                           | Checkpoints and redo logs are written continuously                                         |
+| Disk (manager)    | Small is fine                                                    | Holds only config and logs                                                                 |
+| Network           | Dedicated subnet, 1 Gbit minimum, 10 Gbit preferred, wired       | Nodes exchange heartbeats and data constantly; latency and packet loss cause node failures |
+| Time sync         | `chrony` or NTP on every server                                  | Log correlation and fewer odd timing issues                                                |
+| Power             | UPS, and spread nodes across separate power circuits if possible | Replicas only help if servers do not fail together                                         |
 
 All four servers must run the **same cluster version** and be reachable by fixed IPs.
 
@@ -154,10 +164,10 @@ sudo useradd -r -g mysql -s /bin/false mysql
 
 Download **MySQL NDB Cluster 26.10.0, Linux - Generic** from `dev.mysql.com/downloads/cluster/`:
 
-| Architecture | File |
-|---|---|
-| x86_64 | `mysql-cluster-26.10.0-linux-glibc2.28-x86_64.tar.xz` |
-| aarch64 | `mysql-cluster-26.10.0-linux-glibc2.28-aarch64.tar.xz` |
+| Architecture | File                                                   |
+| ------------ | ------------------------------------------------------ |
+| x86_64       | `mysql-cluster-26.10.0-linux-glibc2.28-x86_64.tar.xz`  |
+| aarch64      | `mysql-cluster-26.10.0-linux-glibc2.28-aarch64.tar.xz` |
 
 Verify the download against the MD5 on the page:
 
@@ -232,13 +242,13 @@ NodeId=13
 HostName=172.15.14.163
 ```
 
-| Setting | Meaning |
-|---|---|
-| `NoOfReplicas=3` | Copies of every row; one node group of three |
-| `DataMemory` | RAM per data node for your data. Size it to your dataset; the lab used 256M, physical servers can use much more |
-| `DataDir` | Where each node keeps logs and checkpoints (a path on **that** node) |
-| `NodeId` | Fixed identity of a node |
-| `HostName` | Only this IP may take that NodeId |
+| Setting          | Meaning                                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| `NoOfReplicas=3` | Copies of every row; one node group of three                                                                    |
+| `DataMemory`     | RAM per data node for your data. Size it to your dataset; the lab used 256M, physical servers can use much more |
+| `DataDir`        | Where each node keeps logs and checkpoints (a path on **that** node)                                            |
+| `NodeId`         | Fixed identity of a node                                                                                        |
+| `HostName`       | Only this IP may take that NodeId                                                                               |
 
 ### 5.2 Start the manager (first time only)
 
@@ -246,7 +256,7 @@ HostName=172.15.14.163
 sudo ndb_mgmd --initial -f /var/lib/mysql-cluster/config.ini --configdir=/var/lib/mysql-cluster
 ```
 
-`ndb_mgmd` runs in the background. Do **not** run the command a second time while it is running (error: *Address already in use*). To stop it: `ndb_mgm -e shutdown`.
+`ndb_mgmd` runs in the background. Do **not** run the command a second time while it is running (error: _Address already in use_). To stop it: `ndb_mgm -e shutdown`.
 
 ### 5.3 Check
 
@@ -468,17 +478,17 @@ Put HAProxy in front of the three SQL nodes (TCP mode, port 3306, health check o
 
 ## 11. Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `Address already in use` on `ndb_mgmd` | Manager already running | Use `ndb_mgm -e show`; stop with `ndb_mgm -e shutdown` first |
-| Commands vanish after editing PATH | `PATH=` without `$PATH:` | Restore with `export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, then fix the line |
-| `libaio.so.1: cannot open shared object file` | Only `libaio.so.1t64` exists | Create the symlink in section 3.3 |
-| `mysqld` starts but wrong version, "Permission denied" on datadir | Ubuntu's own `/usr/sbin/mysqld` was run | Use `/usr/local/mysql/bin/mysqld`; check `which mysqld` |
-| Data node stays "not connected" | Firewall or wrong IP/NodeId | Test `nc -zv 172.15.14.176 1186`; compare `HostName` in `config.ini` |
-| Nodes stuck "starting" | Waiting for the other data nodes | Start all three; check `ndb_mgm -e "all status"` |
-| Node crashes shortly after start | Not enough RAM for `DataMemory` | Lower `DataMemory` or add RAM; read `ndb_*_error.log` in `DataDir` |
-| Table not visible on other node | Table is InnoDB, not NDB | Recreate with `ENGINE=NDBCLUSTER` |
-| Data lost after restart | `--initial` used on a restart | Only use `--initial` on first start or deliberate rebuild |
+| Symptom                                                           | Cause                                   | Fix                                                                                                        |
+| ----------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `Address already in use` on `ndb_mgmd`                            | Manager already running                 | Use `ndb_mgm -e show`; stop with `ndb_mgm -e shutdown` first                                               |
+| Commands vanish after editing PATH                                | `PATH=` without `$PATH:`                | Restore with `export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, then fix the line |
+| `libaio.so.1: cannot open shared object file`                     | Only `libaio.so.1t64` exists            | Create the symlink in section 3.3                                                                          |
+| `mysqld` starts but wrong version, "Permission denied" on datadir | Ubuntu's own `/usr/sbin/mysqld` was run | Use `/usr/local/mysql/bin/mysqld`; check `which mysqld`                                                    |
+| Data node stays "not connected"                                   | Firewall or wrong IP/NodeId             | Test `nc -zv 172.15.14.176 1186`; compare `HostName` in `config.ini`                                       |
+| Nodes stuck "starting"                                            | Waiting for the other data nodes        | Start all three; check `ndb_mgm -e "all status"`                                                           |
+| Node crashes shortly after start                                  | Not enough RAM for `DataMemory`         | Lower `DataMemory` or add RAM; read `ndb_*_error.log` in `DataDir`                                         |
+| Table not visible on other node                                   | Table is InnoDB, not NDB                | Recreate with `ENGINE=NDBCLUSTER`                                                                          |
+| Data lost after restart                                           | `--initial` used on a restart           | Only use `--initial` on first start or deliberate rebuild                                                  |
 
 Log locations: data nodes write `ndb_<id>_out.log` and `ndb_<id>_error.log` in their `DataDir`; the manager writes `ndb_1_cluster.log`; MySQL writes `*.err` in its `datadir`.
 

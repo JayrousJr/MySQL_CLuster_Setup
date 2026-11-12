@@ -1,73 +1,28 @@
-# MySQL CLuster Configurations
+# MySQL Cluster Lab
 
-## 1. Setting up the network
+This repository documents how to set up a **MySQL Cluster**: a group of database servers that work together as one system.
 
-### In Cluster Management we always have the following
+## What is it?
 
-#### A. Management node
+A normal database lives on a single server. If that server breaks, the data and the application go down with it. A MySQL Cluster spreads the same data across several servers, so if one fails, the others keep working without losing anything.
 
-- Holds the cluster configuration, starts and stops nodes, and acts as arbitrator. Runs `ndb_mgmd` Program
+## What this repo contains
 
-#### B. Data node
+- A step-by-step guide to building a small cluster: one server that manages the group and three servers that store the data
+- The configuration files and commands used to set it up
+- Instructions for testing that data written on one server appears on the others
+- Notes on backups, restarting after a power cut, and fixing common problems
 
-- Stores and replicates the data. Runs `ndbd` or `ndbmtd` (multi-threaded) Program
+## Who is it for?
 
-#### C. SQL node
+Anyone learning how database clustering works, or planning to set one up on their own servers. It started as a learning lab and is written so it can be repeated on physical servers.
 
-- The normal MySQL server your apps connect to; it reads and writes via the data nodes
-  Command. Runs `mysqld`
+## Why this setup?
 
-Your apps talk to the SQL nodes on port 3306. The SQL nodes talk to the data nodes, and the management node only coordinates.
+- **Reliability:** the database keeps running if a server goes offline
+- **Consistency:** every server shows the same, up-to-date data
+- **Learning:** a small, hands-on example that is easy to follow and break on purpose
 
-Adding the
+## Getting started
 
-```
-groupadd mysql
-useradd -r -g mysql -s /bin/false mysql
-cp mysql-cluster-26.10.0-linux-glibc2.28-aarch64.tar.xz /usr/local
-rm -r mysql-cluster-26.10.0-linux-glibc2.28-aarch64
-cd /usr/local
-tar xf mysql-cluster-26.10.0-linux-glibc2.28-aarch64.tar.xz
-ln -s mysql-cluster-26.10.0-linux-glibc2.28-aarch64 mysql
-rm -r mysql-cluster-26.10.0-linux-glibc2.28-aarch64.tar.xz
-echo 'export PATH=$PATH:/usr/local/mysql/bin' >> ~/.bashrc
-source ~/.bashrc
-ndb_mgmd --version
-
-```
-
-```
-[ndbd default]
-NoOfReplicas=3
-DataMemory=256M
-DataDir=/var/lib/mysql-cluster
-
-[ndb_mgmd]
-NodeId=1
-HostName=172.15.14.176
-DataDir=/home/legolas/mysql-cluster
-
-[ndbd]
-NodeId=2
-HostName=172.15.14.161
-
-[ndbd]
-NodeId=3
-HostName=172.15.14.162
-
-[ndbd]
-NodeId=4
-HostName=172.15.14.163
-
-[mysqld]
-NodeId=11
-HostName=172.15.14.161
-
-[mysqld]
-NodeId=12
-HostName=172.15.14.162
-
-[mysqld]
-NodeId=13
-HostName=172.15.14.163
-```
+Open the main guide in this repository and follow it step by step.
